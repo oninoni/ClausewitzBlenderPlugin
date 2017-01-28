@@ -79,7 +79,7 @@ class PdxFile():
     def ReadObject(self, treeNode: tree.TreeNode, buffer: utils.BufferReader, depth):
         objectName = ""
         char = buffer.NextChar()
-
+        
         while not buffer.IsEOF() and char == '[':
             depth += 1
             char = buffer.NextChar()
@@ -93,13 +93,30 @@ class PdxFile():
             treeNode.append(node)
             
         while not buffer.IsEOF():
-            if char == "!":
-                self.ReadProperty(node, buffer)
-            elif char == "[":
+            if char == "[":
                 self.ReadObject(node, buffer, depth + 1)
+            elif char == "!":
+                nextProperty = utils.ReadNullByteString(buffer, True)
+                if nextProperty == "pdxasset":
+                    self.ReadAsset(buffer)
+                else:
+                    self.ReadProperty(node, buffer)
 
             if not buffer.IsEOF():
                 char = buffer.NextChar()
+
+    def ReadAsset(self, buffer: utils.BufferReader):
+        lowerBound = buffer.GetCurrentOffset()
+
+        asset = PdxAsset()
+        utils.ReadNullByteString(buffer)
+        buffer.GetNextChar()
+        asset.value = buffer.NextUInt32()
+
+        upperBound = buffer.GetCurrentOffset()
+
+        asset.bounds = (lowerBound, upperBound)
+        self.nodes.append(asset)
 
 class PdxAsset():
     def __init__(self):
