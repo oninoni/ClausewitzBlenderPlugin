@@ -137,7 +137,11 @@ class PdxMesh():
         self.uv_coords = []
         self.material = None
 
-class Locator():
+class PdxLocators():
+    def __init__(self):
+        self.locators  = []
+
+class PdxLocator():
     def __init__(self, name, pos):
         self.bounds = (0,0)
         self.name = name
