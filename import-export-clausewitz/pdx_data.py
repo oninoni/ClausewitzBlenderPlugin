@@ -6,7 +6,8 @@ class PdxFile():
         self.filename = filename
         self.fileReference = None
         self.rawData = []
-        self.nodes = []
+        self.asset = None
+        self.objects = None
         self.dataTree = tree.Tree(tree.TreeNode("root"))
 
     def read(self):
@@ -17,66 +18,109 @@ class PdxFile():
 
     def __parse__(self):
         offset = 0
+        status = []
 
         data = self.rawData.lstrip(b"@@b@")
 
         buffer = utils.BufferReader(data)
-        rootNode = tree.TreeNode("root")
-
-        self.dataTree = tree.Tree(rootNode)
-        self.ReadObject(rootNode, buffer, -1)
-
-        self.dataTree.print()
-        self.fileReference.close()
-
-    def ReadProperty(self, treeNode: tree.TreeNode, buffer: utils.BufferReader):
-        name = ""
-        dataCount = 0
-        stringType = 1
-        propertyData = []
-
+        
         lowerBound = buffer.GetCurrentOffset()
+        char = buffer.NextChar()
         nameLength = buffer.NextInt8()
 
-        for i in range(1, nameLength + 1):
-            name += buffer.NextChar()
+        if utils.ReadLengthPrefixedString(buffer, nameLength) != "pdxasset":
+            print("Asset File is not valid.")
+            return
 
-        name = utils.TranslatePropertyName(name)
+        self.asset = PdxAsset()
+        buffer.NextChar()
+        newValue = buffer.NextUInt32()
+        self.asset.value = newValue
+        self.asset.bounds = (lowerBound, buffer.GetCurrentOffset())
 
-        char = buffer.NextChar()
+        lastObject = None
+        currentObject = None
+        lastStatus = ""
+        status.append("ROOT_OBJECT")
 
-        if char == "i":
-            dataCount = buffer.NextUInt32()
+        while not buffer.IsEOF():
+            level = 1
+            char = buffer.NextChar()
 
-            for i in range(0, dataCount):
-                propertyData.append(buffer.NextInt32())
-        elif char == "f":
-            dataCount = buffer.NextUInt32()
+            if char == "[":
+                while not buffer.IsEOF():
+                    char = buffer.NextChar(True)
 
-            for i in range(0, dataCount):
-                propertyData.append(buffer.NextFloat32())
-        elif char == "s":
-            stringValue = ""
-            stringType = buffer.NextUInt32()
-            dataCount = buffer.NextUInt32()
+                    if char == "[":
+                        buffer.NextChar()
+                        level += 1
+                    else:
+                        break
+                
+                print(level)
+                name = utils.ReadNullByteString(buffer)
 
-            stringValue = utils.ReadNullByteString(buffer)
+                if status[len(status) - 1] == "ROOT_OBJECT":
+                    if name == "locator":
+                        lastObject = currentObject
+                        currentObject = PdxLocators()
+                        status.append("LOCATORS")
+                    elif name == "object":
+                        lastObject = currentObject
+                        currentObject = PdxObject()
+                        status.append("OBJECT")
+                elif status[len(status) - 1] == "LOCATORS":
+                    lastObject = currentObject
+                    currentObject = PdxLocator(name, (0,0))
+                    status.append("LOCATOR")
+                elif status[len(status) - 1] == "OBJECT":
+                    lastObject = currentObject
+                    currentObject = PdxShape(name)
+                    status.append("SHAPE")
+                elif status[len(status) - 1] == "SHAPE":
+                    lastObject = currentObject
+                    currentObject = PdxMesh()
+                    status.append("MESH")
+                elif status[len(status) - 1] == "MESH":
+                    print(name)
+                    if name == "aabb":
+                        lastObject = currentObject
+                        currentObject = PdxBounds()
+                        status.append("BOUNDS")
+                    elif name == "material":
+                        lastObject = currentObject
+                        currentObject = PdxMaterial()
+                        status.append("MATERIAL")
+                else:
+                    status.pop()
+                    continue
 
-            propertyData.append(stringValue)
+                print(status)
 
-        newNode = tree.TreeNode(name)
-        newNode.value = propertyData
+                #Property
+                while not buffer.IsEOF() and buffer.NextChar(True) != "[":
+                    if buffer.NextChar(True) == "!":
+                        buffer.NextChar()
+                        tempProperty = self.ReadProperty(buffer)
 
-        upperBound = buffer.GetCurrentOffset()
+                #if not buffer.IsEOF(1) and buffer.NextChar(True) == "[":
+                #    tempLevel = 1
+                    
+                #    while not buffer.IsEOF():
+                #        char = buffer.NextChar(True, tempLevel - 1)
 
-        if name == "pdxasset":
-            asset = PdxAsset()
-            asset.bounds = (lowerBound, upperBound)
-            self.nodes.append(asset)
+                #        if char == "[":
+                #            tempLevel += 1
+                #        else:
+                #            break
 
-        treeNode.append(newNode)
+                #    if tempLevel <= level:
+                if len(status) > 1:
+                    status.pop()
 
-    def ReadObject(self, treeNode: tree.TreeNode, buffer: utils.BufferReader, depth):
+        self.fileReference.close()
+
+    def ReadObject(self, ):
         objectName = ""
         char = buffer.NextChar()
         
@@ -105,6 +149,40 @@ class PdxFile():
             if not buffer.IsEOF():
                 char = buffer.NextChar()
 
+    def ReadProperty(self, buffer: utils.BufferReader):
+        value = ""
+        name = ""
+        lowerBound = buffer.GetCurrentOffset()
+        nameLength = buffer.NextInt8()
+
+        for i in range(0, nameLength):
+            name += buffer.NextChar()
+
+        name = utils.TranslatePropertyName(name)
+
+        char = buffer.NextChar()
+
+        if char == "i":
+            dataCount = buffer.NextUInt32()
+            value = []
+
+            for i in range(0, dataCount):
+                value.append(buffer.NextInt32())
+        elif char == "f":
+            dataCount = buffer.NextUInt32()
+            value = []
+
+            for i in range(0, dataCount):
+                value.append(buffer.NextFloat32())
+        elif char == "s":
+            stringValue = ""
+            stringType = buffer.NextUInt32()
+            dataCount = buffer.NextUInt32()
+
+            value = utils.ReadNullByteString(buffer)
+
+        return PdxProperty(name, value)
+        
     def ReadAsset(self, buffer: utils.BufferReader):
         lowerBound = buffer.GetCurrentOffset()
 
@@ -123,11 +201,18 @@ class PdxAsset():
         self.bounds = (0,0)
         self.value = 0
 
-class PdxMesh():
-    def __init__(self, name, blenderName):
-        self.bounds = (0,0)
+class PdxObject():
+    def __init__(self):
+        self.shapes = []
+
+class PdxShape():
+    def __init__(self, name):
         self.name = name
-        self.blenderName = blenderName
+        self.mesh = None
+
+class PdxMesh():
+    def __init__(self):
+        self.bounds = (0,0)
         self.blenderMesh = None
         self.verts = []
         self.faces = []
@@ -136,6 +221,23 @@ class PdxMesh():
         self.locators = []
         self.uv_coords = []
         self.material = None
+
+class PdxMaterial():
+    def __init__(self):
+        self.shader = ""
+        self.diff = ""
+        self.n = "" #NormalMap
+        self.spec = ""
+
+class PdxBounds():
+    def __init__(self):
+        self.min = 0.0
+        self.max = 0.0
+
+class PdxProperty():
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
 
 class PdxLocators():
     def __init__(self):

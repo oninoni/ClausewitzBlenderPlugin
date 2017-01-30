@@ -36,9 +36,9 @@ class BufferReader:
             self.__offset__ += 4
             return struct.unpack_from("f", self.buffer, self.__offset__ - 4)[0]
 
-    def NextChar(self, lookahead=False):
+    def NextChar(self, lookahead=False, lookaheadBytes=0):
         if lookahead:
-            return chr(self.buffer[self.__offset__])
+            return chr(self.buffer[self.__offset__ + lookaheadBytes])
         else:
             self.__offset__ += 1
             return chr(self.buffer[self.__offset__ - 1])
@@ -62,6 +62,14 @@ def ReadNullByteString(buffer: BufferReader, lookahead=False):
         buffer.__offset__ = offset
 
     return stringValue
+
+def ReadLengthPrefixedString(buffer: BufferReader, length):
+    name = ""
+
+    for i in range(0, length):
+        name += buffer.NextChar()
+
+    return name;
 
 def my_range(start, end, step):
     while start <= end:
