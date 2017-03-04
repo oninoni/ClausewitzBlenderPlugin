@@ -1,5 +1,6 @@
 import io
 import struct
+import mathutils
 from . import (utils)
 
 class PdxFile():
@@ -139,6 +140,13 @@ class PdxFile():
                 result.faces = utils.TransposeCoordinateArray3D(object_properties[4].value)
                 print("Faces: " + str(len(object_properties[4].value)))
                 result.normals = utils.TransposeCoordinateArray3D(object_properties[1].value)
+                normals_file = io.open("C:/Users/Bernhard/Documents/normals_import.txt", 'wt')
+
+                for i in range(0, len(result.normals)):
+                    normals_file.write(str(mathutils.Vector(result.normals[i])) + "\n")
+
+                normals_file.close()
+
                 print("Normals: " + str(len(object_properties[1].value)))
                 result.tangents = object_properties[2].value
                 print("Tangents: " + str(len(object_properties[2].value)))
@@ -205,8 +213,15 @@ class PdxMesh():
 
         result.extend(struct.pack("cb2sI", b'!', 1, b'nf', len(self.normals) * 3))
 
+        normals_file = io.open("C:/Users/Bernhard/Documents/normals_export.txt", 'wt')
+
         for i in range(0, len(self.normals)):
-            result.extend(struct.pack("fff", self.normals[i][0], self.normals[i][1], self.normals[i][2]))
+            normals_file.write(str(self.normals[i]) + "\n")
+            result.extend(struct.pack("f", self.normals[i][0]))
+            result.extend(struct.pack("f", self.normals[i][1]))
+            result.extend(struct.pack("f", self.normals[i][2]))
+
+        normals_file.close()
 
         result.extend(struct.pack("cb3s", b'!', 2, b'taf'))
         result.extend(struct.pack("I", len(self.tangents) * 4))
@@ -232,7 +247,7 @@ class PdxMesh():
         result.extend(struct.pack("I", len(self.faces) * 3))
 
         for i in range(0, len(self.faces)):
-            result.extend(struct.pack("III", self.faces[i][0],  self.faces[i][1],  self.faces[i][2]))
+            result.extend(struct.pack("III", self.faces[i][0], self.faces[i][1], self.faces[i][2]))
 
         result.extend(self.meshBounds.get_binary_data())
         result.extend(self.material.get_binary_data())

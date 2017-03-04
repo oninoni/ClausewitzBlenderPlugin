@@ -57,13 +57,13 @@ class ClausewitzImporter(Operator, ImportHelper):
         pdx = importer.PdxFileImporter(self.filepath)
         pdx.import_mesh()
 
-        return {'FINISHED'}      
+        return {'FINISHED'}
 
-#
-#   The error message operator. When invoked, pops up a dialog 
-#   window with the given message.   
+#   The error message operator. When invoked, pops up a dialog
+#   window with the given message.
 #
 class MessageOperator(bpy.types.Operator):
+    """"""
     bl_idname = "error.message"
     bl_label = "Message"
     message = StringProperty(name="")
