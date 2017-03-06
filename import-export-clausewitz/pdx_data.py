@@ -147,7 +147,14 @@ class PdxFile():
                 normals_file.close()
 
                 print("Normals: " + str(len(object_properties[1].value)))
-                result.tangents = object_properties[2].value
+                result.tangents = utils.TransposeCoordinateArray4D(object_properties[2].value)
+                tangents_file = io.open("C:/Users/Bernhard/Documents/tangents_import.txt", 'wt')
+
+                for i in range(0, len(result.tangents)):
+                    tangents_file.write(str(mathutils.Vector(result.tangents[i])) + "\n")
+
+                tangents_file.close()
+
                 print("Tangents: " + str(len(object_properties[2].value)))
                 result.uv_coords = utils.TransposeCoordinateArray2D(object_properties[3].value)
                 print("UV-Map: " + str(len(object_properties[3].value)))
@@ -227,11 +234,16 @@ class PdxMesh():
 
         print(len(self.tangents) * 4)
 
+        tangents_file = io.open("C:/Users/Bernhard/Documents/tangents_export.txt", 'wt')
+
         for i in range(0, len(self.tangents)):
+            tangents_file.write(str(self.tangents[i]) + "\n")
             result.extend(struct.pack("f", self.tangents[i][0]))
             result.extend(struct.pack("f", self.tangents[i][1]))
             result.extend(struct.pack("f", self.tangents[i][2]))
             result.extend(struct.pack("f", self.tangents[i][3]))
+
+        tangents_file.close()
 
         result.extend(struct.pack("cb3s", b'!', 2, b'u0f'))
         result.extend(struct.pack("I", len(self.uv_coords) * 2))
