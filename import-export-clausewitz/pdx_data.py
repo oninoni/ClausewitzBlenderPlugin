@@ -98,11 +98,11 @@ class PdxFile():
 
         if char == "[":
             depth_temp = 1
-            
+
             while buffer.NextChar(True) == '[':
                 buffer.NextChar()
                 depth_temp += 1
-                
+
             return self.read_object(buffer, depth_temp, prev_obj)
         else:
             object_name = char + utils.ReadNullByteString(buffer)
@@ -132,10 +132,6 @@ class PdxFile():
                     else:
                         break
 
-            #temp = ""
-            #for i in range(0, depth):
-            #    temp += "-"
-            #print(temp + "Sub Objects: ", len(sub_objects))
 
             if object_name == "object":
                 result = PdxWorld(sub_objects)
@@ -198,12 +194,14 @@ class PdxFile():
             return result
 
 class PdxAsset():
+    """Asset Object"""
     def __init__(self):
-        self.bounds = (0,0)
+        self.bounds = (0, 0)
         self.name = "pdxasset"
         self.value = 0
 
     def get_binary_data(self):
+        """Returns the Byte encoded Object Data"""
         result = bytearray()
 
         result.extend(struct.pack("cb" + str(len(self.name)) + "s", b'!', len(self.name), self.name.encode('UTF-8')))
@@ -218,6 +216,7 @@ class PdxWorld():
         self.objects = objects
 
     def get_binary_data(self):
+        """Returns the Byte encoded Object Data"""
         result = bytearray()
 
         result.extend(struct.pack("7sb", b'[object', 0))
@@ -256,6 +255,7 @@ class PdxMesh():
         self.skin = None
 
     def get_binary_data(self):
+        """Returns the Byte encoded Object Data"""
         result = bytearray()
 
         result.extend(struct.pack("7sb", b'[[[mesh', 0))
@@ -332,6 +332,7 @@ class PdxMaterial():
 
     #Is implemented incomplete (Only 1 Texture)
     def get_binary_data(self):
+        """Returns the Byte encoded Object Data"""
         result = bytearray()
 
         result.extend(struct.pack("12sb", b'[[[[material', 0))
@@ -362,8 +363,9 @@ class PdxBounds():
         self.max = max
 
     def get_binary_data(self):
+        """Returns the Byte encoded Object Data"""
         result = bytearray()
-        
+
         result.extend(struct.pack("8sb", b'[[[[aabb', 0))
 
         result.extend(struct.pack("cb4s", b'!', 3, b'minf'))
@@ -400,6 +402,7 @@ class PdxLocators():
         self.locators = []
 
     def get_binary_data(self):
+        """Returns the Byte encoded Object Data"""
         result = bytearray()
 
         result.extend(struct.pack("8sb", b'[locator', 0))
@@ -416,11 +419,12 @@ class PdxLocator():
         self.pos = pos
 
     def get_binary_data(self):
+        """Returns the Byte encoded Object Data"""
         result = bytearray()
 
         result.extend(struct.pack("2s", b'[['))
         result.extend(struct.pack(str(len(self.name)) + "sb", self.name.encode('UTF-8'), 0))
-        result.extend(struct.pack("cb2sifff", b'!', 1, b'pf', 3, -self.pos[0], self.pos[2], self.pos[1]))
+        result.extend(struct.pack("cb2sifff", b'!', 1, b'pf', 3, self.pos[0], self.pos[1], self.pos[2]))
         result.extend(struct.pack("cb2sifff", b'!', 1, b'qf', 3, 0.0, 0.0, 0.0))
 
         return result
