@@ -46,34 +46,34 @@ class PdxFile():
         for i in range(name_length):
             name += buffer.NextChar()
 
-        utils.Log.info("Property: " + name)
+        utils.Log.debug("Property: " + name)
 
         char = buffer.NextChar()
 
         if char == "i":
             data_count = buffer.NextUInt32()
-            #utils.Log.info("Count: " + str(data_count))
+            #utils.Log.debug("Count: " + str(data_count))
             for i in range(data_count):
                 temp = buffer.NextInt32()
                 property_data.append(temp)
-                #utils.Log.info("Integer: " + str(temp))
+                #utils.Log.debug("Integer: " + str(temp))
 
             if name == "pdxasset":
-                utils.Log.info("PDXAsset: " + str(property_data))
+                utils.Log.debug("PDXAsset: " + str(property_data))
         elif char == "f":
             data_count = buffer.NextUInt32()
-            #utils.Log.info("Count: " + str(data_count))
+            #utils.Log.debug("Count: " + str(data_count))
             for i in range(data_count):
                 temp = buffer.NextFloat32()
                 property_data.append(temp)
-                #utils.Log.info("Float: " + str(temp))
+                #utils.Log.debug("Float: " + str(temp))
         elif char == "s":
             value = ""
             stringType = buffer.NextUInt32()
             dataCount = buffer.NextUInt32()
 
             value = utils.ReadNullByteString(buffer)
-            #utils.Log.info("String: " + value)
+            #utils.Log.debug("String: " + value)
 
             property_data = value
 
@@ -107,7 +107,7 @@ class PdxFile():
             return self.read_object(buffer, depth_temp, prev_obj)
         else:
             object_name = char + utils.ReadNullByteString(buffer)
-            utils.Log.info((" "*depth) + "Object Name: " + object_name)
+            utils.Log.debug((" "*depth) + "Object Name: " + object_name)
 
             if object_name == "object":
                 result = PdxWorld()

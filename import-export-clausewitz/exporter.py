@@ -111,7 +111,7 @@ class PdxFileExporter:
         return tangent.to_4d()#, biTangent
 
     #Exports one face into the global arrays
-    def handle_BMesh_Face(self, face):
+    def handle_BMesh_Face(self, face, collisionMesh):
         #Indices of the Face
         verts = []
         normals = []
@@ -121,67 +121,78 @@ class PdxFileExporter:
             #Calculate Vertex Position
             vert = v.co * self.transform_mat
 
-            # TODO Auto Edge Split on sharp Edges (For now in workflow before Export)
-            #Caluculate Normal Vector (Depending on Face smoothness)
-            if face.smooth:
-                normal = v.normal * self.transform_mat_inverse
-            else:
-                normal = face.normal * self.transform_mat_inverse
-            normal = -(normal * self.mat_mirror) # Temporary Fix
-            normal.normalize()
-
-            #Getting all UV Layers
-            loops = face.loops
-
-            #Caluculate UV Vector
-            for loop in loops:
-                if loop.vert == v:
-                    try:
-                        uv = loop[self.uv_active].uv.copy()
-                    except AttributeError:
-                        uv = [0,0]
-                    uv[1] = 1 - uv[1]
-
             #Round Values (because of the compare)
-            for i in range(2):
-                uv[i] = round(uv[i], self.exporter.rounding_position)
             for i in range(3):
                 vert[i] = round(vert[i], self.exporter.rounding_position)
-                normal[i] = round(normal[i], self.exporter.rounding_position)
 
             #Freezing the vectors so they can be hashed
             vert.freeze()
             utils.Log.debug("Vert: " + str(vert))
-            normal.freeze()
-            utils.Log.debug("Normal: " + str(normal))
-            uv.freeze()
-            utils.Log.debug("UV: " + str(uv))
 
             verts.append(vert)
-            normals.append(normal)
-            uv_coords.append(uv)
-        
-        if len(verts) != 3 or len(normals) != 3 or len(uv_coords) != 3:
+
+            if not(collisionMesh):
+                # TODO Auto Edge Split on sharp Edges (For now in workflow before Export)
+                #Caluculate Normal Vector (Depending on Face smoothness)
+                if face.smooth:
+                    normal = v.normal * self.transform_mat_inverse
+                else:
+                    normal = face.normal * self.transform_mat_inverse
+                normal = -(normal * self.mat_mirror) # Temporary Fix
+                normal.normalize()
+
+                #Getting all UV Layers
+                loops = face.loops
+
+                #Caluculate UV Vector
+                for loop in loops:
+                    if loop.vert == v:
+                        try:
+                            uv = loop[self.uv_active].uv.copy()
+                        except AttributeError:
+                            uv = [0,0]
+                        uv[1] = 1 - uv[1]
+
+                #Round Values (because of the compare)
+                for i in range(2):
+                    uv[i] = round(uv[i], self.exporter.rounding_position)
+                for i in range(3):
+                    normal[i] = round(normal[i], self.exporter.rounding_position)
+
+                #Freezing the vectors so they can be hashed
+                normal.freeze()
+                utils.Log.debug("Normal: " + str(normal))
+                uv.freeze()
+                utils.Log.debug("UV: " + str(uv))
+
+                normals.append(normal)
+                uv_coords.append(uv)
+
+        if len(verts) != 3:
             #TODO Auto-Triangulation (Recursive Algorithm or Just apply the Blender one)
-            utils.Log.critical("Face has " + str(len(indices)) + " vertices! (Not Triangulated)")
+            utils.Log.critical("Face has " + str(len(verts)) + " vertices! (Not Triangulated)")
             return
 
-        if self.exporter.export_Tangent:
-            tangent = self.get_Tangent(verts, uv_coords)
-        else:
-            tangent = mathutils.Vector((0,1,0,1))
+        if not(collisionMesh):
+            if self.exporter.export_Tangent:
+                tangent = self.get_Tangent(verts, uv_coords)
+            else:
+                tangent = mathutils.Vector((0,1,0,1))
 
-        for i in range(4):
-            tangent[i] = round(tangent[i], self.exporter.rounding_position)
+            for i in range(4):
+                tangent[i] = round(tangent[i], self.exporter.rounding_position)
 
-        tangent.freeze()
-        utils.Log.debug("Tangent: " + str(tangent))
+            tangent.freeze()
+            utils.Log.debug("Tangent: " + str(tangent))
 
         indices = []
 
         for i in range(3):
-            #Reading old Vertex-Index from indexMap
-            oldIndex = self.indexMap.get((verts[i],normals[i],uv_coords[i],tangent))
+            if not(collisionMesh):
+                #Reading old Vertex-Index from indexMap
+                oldIndex = self.indexMap.get((verts[i],normals[i],uv_coords[i],tangent))
+            else:
+                oldIndex = self.indexMap.get((verts[i]))
 
             #Checking if Vertex already exists
             if oldIndex is not None:
@@ -197,12 +208,16 @@ class PdxFileExporter:
                 indices.append(index)
 
                 self.verts.append(verts[i])
-                self.normals.append(normals[i])
-                self.uv_coords.append(uv_coords[i])
-                self.tangents.append(tangent)
 
-                #Needed for Speed
-                self.indexMap[(verts[i],normals[i],uv_coords[i],tangent)] = index
+                if not(collisionMesh):
+                    self.normals.append(normals[i])
+                    self.uv_coords.append(uv_coords[i])
+                    self.tangents.append(tangent)
+
+                    #Needed for Speed
+                    self.indexMap[(verts[i],normals[i],uv_coords[i],tangent)] = index
+                else:
+                    self.indexMap[(verts[i])] = index
 
         #Setting Face
         self.faces.append((indices[2], indices[1], indices[0]))
@@ -223,6 +238,10 @@ class PdxFileExporter:
 
         #Material List (for splitting along them)
         materials = self.get_material_list(obj)
+
+        if(len(materials)) == 0:
+            utils.Log.warning("No Material Found! Exporting as one.")
+            materials["None"] = "None"
 
         #Base Bmesh Generation
         bMesh = bmesh.new()
@@ -262,8 +281,8 @@ class PdxFileExporter:
             #Compiling all Faces into the Arrays
             for face in bm.faces:
                 #Check if face is part of selected Material
-                if face.material_index == index:
-                    self.handle_BMesh_Face(face)
+                if index == face.material_index or index == "None":
+                    self.handle_BMesh_Face(face, obj.draw_type =="WIRE")
                     bpy.context.window_manager.progress_update(len(self.faces))
 
             #Print Counts
@@ -298,7 +317,7 @@ class PdxFileExporter:
             #Generating Material
             diff_file = "test_diff"
 
-            if len(obj.material_slots) > 0:
+            if len(obj.material_slots) > 0 and material != "None":
                 mat = obj.material_slots[material].material
 
                 for mtex_slot in mat.texture_slots:
@@ -309,15 +328,21 @@ class PdxFileExporter:
                             else:
                                 diff_file = os.path.basename(mtex_slot.texture.image.filepath)
             else:
-                diff_file = os.path.basename(mesh.uv_textures[0].data[0].image.filepath)
+                try:
+                    diff_file = os.path.basename(mesh.uv_textures[0].data[0].image.filepath)
+                except IndexError:
+                    pass
 
-            #Setting Materials (Not very importing, because it's overridenn in .gfx file)
-            result_mesh.material.shader = "PdxMeshShip"
-            result_mesh.material.diff = diff_file
-            #result_mesh.material.normal = diff_file.replace(".dds", "_normal.dds")
-            #result_mesh.material.spec = diff_file.replace(".dds", "_spec.dds")
-            result_mesh.material.normal = "nonormal.dds"
-            result_mesh.material.spec = "nospec.dds"
+            if obj.draw_type =="WIRE":
+                result_mesh.material.shader = "Collision"
+            else:
+                #Setting Materials (Not very importing, because it's overridenn in .gfx file)
+                result_mesh.material.shader = "PdxMeshShip"
+                result_mesh.material.diff = diff_file
+                #result_mesh.material.normal = diff_file.replace(".dds", "_normal.dds")
+                #result_mesh.material.spec = diff_file.replace(".dds", "_spec.dds")
+                result_mesh.material.normal = "nonormal.dds"
+                result_mesh.material.spec = "nospec.dds"
 
             #Adding Mesh to List
             result_meshes.append(result_mesh)
@@ -353,10 +378,11 @@ class PdxFileExporter:
 
             if obj.type == "MESH":
                 if obj.select and obj.parent is None:
-                        pdxShape = pdx_data.PdxShape(obj.name)
+                    print(obj.name)
+                    pdxShape = pdx_data.PdxShape(obj.name)
 
-                        pdxShape.meshes = self.splitMeshes(obj)
-                        pdxWorld.objects.append(pdxShape)
+                    pdxShape.meshes = self.splitMeshes(obj)
+                    pdxWorld.objects.append(pdxShape)
             elif (obj.type == "ARMATURE"):
                 if obj.select and obj.parent is None:
                     pdxSkeleton = pdx_data.PdxSkeleton()

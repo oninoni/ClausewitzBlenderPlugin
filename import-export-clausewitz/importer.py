@@ -232,14 +232,20 @@ class PdxFileImporter:
             else:
                 utils.Log.info("ERROR ::: Invalid node found: " + str(node))
 
-    def getRecursiveBoneMatrix(self, bone):
-        if bone.parent is None:
-            return bone.matrix.copy()
-        else:
-            parent_inv = bone.parent.matrix.copy()
-            parent_inv.invert()
+    def get_BoneMatrix(self, bone):
+        if bone is None:
+            return mathutils.Matrix().Identity(4)
 
-            return bone.matrix.copy() * parent_inv
+        local = bone.bone.matrix_local
+        basis = bone.matrix_basis
+
+        parent = bone.parent
+        if parent == None:
+            return  local * basis
+        else:
+            parent_local = parent.bone.matrix_local
+
+            return self.get_BoneMatrix(parent) * (parent_local.inverted() * local) * basis
 
     def import_anim(self):
         scn = bpy.context.scene
@@ -295,23 +301,52 @@ class PdxFileImporter:
             bpy.context.scene.objects.active = armature
             bpy.ops.object.mode_set(mode='POSE')
 
+            boneRotMat = mathutils.Matrix(((1, 0, 0, 0), (0, 0, 1, 0), (0, 1, 0, 0), (0, 0, 0, 1)))
+
+            poseDataT = {}
+
             for joint in joints:
-                print(joint.name)
+                print("\n" + joint.name)
                 bone = armature.pose.bones[joint.name]
                 bone.rotation_mode = 'QUATERNION'
 
-                bonematrix = self.getRecursiveBoneMatrix(bone)
-                print("\nRAW:")
-                print(bone.matrix)
-                print("\nCalculated:")
-                print(bonematrix)
-                bonematrix.invert()
+                print("T:")
+                vec = mathutils.Vector((joint.translation[0], joint.translation[1], joint.translation[2], 1)) * self.mat_rot * boneRotMat
+                print(vec)
 
-                print("\nT:")
-                t = mathutils.Vector((joint.translation[0], joint.translation[1], joint.translation[2], 1))
-                print(t * self.mat_rot)
-                bone.location = (bonematrix * (t * self.mat_rot)).to_3d()
-                print(bone.location)
+                poseDataT[joint.name] = {}
+                poseDataT[joint.name][0] = mathutils.Vector((0,0,0))
+                try:
+                    vec = self.get_BoneMatrix(bone.parent) * vec
+                    print(vec)
+                    poseDataT[joint.name][0] = ((self.get_BoneMatrix(bone)).inverted() * vec).to_3d()
+                except Exception:
+                    print("Noparent")
+
+
+            for name,poseJoint in poseDataT.items():
+                bone = armature.pose.bones[name]
+                for frame,vec in poseJoint.items():
+                    print(name + " | " + str(frame) + " | " + str(vec))
+
+
+
+                
+                #print(bone.location)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                 #if joint in tJoints:
                 #    i = tJoints.index(joint)
                 #    for f in range(scn.frame_end):
@@ -319,19 +354,35 @@ class PdxFileImporter:
                 #        bone.location = (bonematrix * (t * self.mat_rot)).to_3d()
                 #        bone.keyframe_insert(data_path="location", frame=f+1)
 
+
+                #bonematrix = self.getRecursiveBoneMatrix(bone, 1)
+
                 #print("\nQ:")
-                #q = mathutils.Quaternion((joint.quaternion[3], joint.quaternion[0], joint.quaternion[1], joint.quaternion[2]))
+                #q = mathutils.Quaternion((joint.quaternion[0], joint.quaternion[1], joint.quaternion[2]), joint.quaternion[3])
                 #print(q)
+
+                #print(mathutils.Quaternion((q.axis.to_4d() * self.mat_rot).to_3d(), q.angle))
+                #print(bone.matrix.to_quaternion())
+
+                #bone.rotation_quaternion = mathutils.Quaternion((bonematrix * (q.axis.to_4d() * self.mat_rot)).to_3d(), q.angle)
+                #print("PoseTransformed: " + str(bone.rotation_quaternion))
+
+                #bonematrix = self.getRecursiveBoneMatrix(bone, 1)
+                #mathutils.Quaternion((bonematrix * (q.axis.copy().to_4d() * self.mat_rot)).to_3d(), q.angle)
+                #if bone.parent is not None:
+                #    print(bone.parent.matrix.to_quaternion())
                 #print((q.to_matrix().to_4x4() * self.mat_rot).to_quaternion())
-                #bone.rotation_quaternion = (bonematrix * (q.to_matrix().to_4x4() * self.mat_rot)).to_quaternion()
+
                 #print(bone.rotation_quaternion)
                 #if joint in qJoints:
                 #    i = qJoints.index(joint)
                 #    for f in range(scn.frame_end):
-                #        q = mathutils.Vector((samples.q[(f * len(qJoints) + i) * 4 + 3], samples.q[(f * len(qJoints) + i) * 4 + 0], samples.q[(f * len(qJoints) + i) * 4 + 1], samples.q[(f * len(qJoints) + i) * 4 + 2]))
-                #        bone.rotation_quaternion = bonematrix * (q * self.mat_rot)
+                #        q = mathutils.Quaternion((samples.q[(f * len(qJoints) + i) * 4 + 3], samples.q[(f * len(qJoints) + i) * 4 + 0], samples.q[(f * len(qJoints) + i) * 4 + 1], samples.q[(f * len(qJoints) + i) * 4 + 2]))
+                #        bone.rotation_quaternion = (bonematrix * (q.to_matrix().to_4x4() * self.mat_rot)).to_quaternion()
                 #        bone.keyframe_insert(data_path="rotation_quaternion", frame=f+1)
-                
+
+                #bonematrix = self.getRecursiveBoneMatrix(bone, 2)
+
                 #print("\nS:")
                 #s = mathutils.Vector((joint.size, joint.size, joint.size, 0))
                 #print(s * self.mat_rot)
